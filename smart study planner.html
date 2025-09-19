@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple Study Planner</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width:900px; margin:24px auto; padding:0 12px; }
+    h1 { text-align:center; }
+    form { display:grid; gap:8px; grid-template-columns: 1fr 1fr; margin-bottom:12px; }
+    form input, form select { padding:8px; width:100%; box-sizing:border-box; }
+    form .full { grid-column:1/-1; }
+    button { padding:8px 12px; cursor:pointer; }
+    .controls { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+    #tasks { margin-top:12px; }
+    .task { display:flex; justify-content:space-between; align-items:center; padding:8px; border:1px solid #ddd; border-radius:6px; margin-bottom:8px; }
+    .meta { font-size:0.9rem; color:#444; }
+    .done { text-decoration:line-through; opacity:0.6; }
+    .priority-low { color:green; }
+    .priority-med { color:orange; }
+    .priority-high { color:red; }
+    .progress-wrap { background:#eee; border-radius:6px; overflow:hidden; margin:12px 0; }
+    .progress { height:12px; background:linear-gradient(90deg,#4caf50,#8bc34a); width:0%; transition:width .3s; }
+    @media (max-width:600px) { form { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Simple Study Planner</h1>
+
+  <div class="controls">
+    <button id="clearAll">Clear All</button>
+    <div style="margin-left:auto">
+      Completion: <span id="pct">0%</span>
+    </div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress" id="progress"></div>
+  </div>
+
+  <form id="taskForm" autocomplete="off">
+    <input id="title" placeholder="Task title (e.g., Revise Unit 2)" required />
+    <input id="subject" placeholder="Subject (e.g., Math)" />
+    <input id="due" type="datetime-local" class="full" />
+    <select id="priority" >
+      <option value="low">Low priority</option>
+      <option value="medium" selected>Medium priority</option>
+      <option value="high">High priority</option>
+    </select>
+    <button type="submit">Add Task</button>
+  </form>
+
+  <div id="tasks"></div>
+
+<script>
+(() => {
+  const STORAGE_KEY = 'simple_study_planner_tasks_v1';
+  const form = document.getElementById('taskForm');
+  const tasksDiv = document.getElementById('tasks');
+  const progressEl = document.getElementById('progress');
+  const pct = document.getElementById('pct');
+  const clearAllBtn = document.getElementById('clearAll');
+
+  let tasks = loadTasks();
+
+  // Request notification permission once (optional)
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission().catch(()=>{});
+  }
+
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const title = document.getElementById('title').value.trim();
+    const subject = document.getElementById('subject').value.trim();
+    const due = document.getElementById('due').value;
+    const priority = document.getElementById('priority').value;
+
+    if (!title) return alert('Please add a task title.');
+
+    const task = {
+      id: Date.now().toString(),
+      title,
+      subject,
+      due: due || null,
+      priority,
+      createdAt: new Date().toISOString(),
+      done: false,
+      reminded: false
+    };
+    tasks.push(task);
+    saveAndRender();
+    form.reset();
+  });
+
+  clearAllBtn.addEventListener('click', () => {
+    if (!confirm('Clear all tasks?')) return;
+    tasks = [];
+    saveAndRender();
+  });
+
+  function saveAndRender() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    renderTasks();
+    updateProgress();
+  }
+
+  function loadTasks() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function renderTasks() {
+    // sort by due date soonest, then priority
+    tasks.sort((a,b) => {
+      if (a.due && b.due) return new Date(a.due) - new Date(b.due);
+      if (a.due) return -1;
+      if (b.due) return 1;
+      return 0;
+    });
+
+    tasksDiv.innerHTML = '';
+    if (tasks.length === 0) {
+      tasksDiv.innerHTML = '<p>No tasks yet. Add your first study goal!</p>';
+      return;
+    }
+
+    tasks.forEach(task => {
+      const el = document.createElement('div');
+      el.className = 'task';
+      if (task.done) el.classList.add('done');
+
+      const left = document.createElement('div');
+      const title = document.createElement('div');
+      title.textContent = task.title;
+      title.style.fontWeight = '600';
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const parts = [];
+      if (task.subject) parts.push(task.subject);
+      if (task.due) {
+        try {
+          const dt = new Date(task.due);
+          if (!isNaN(dt)) parts.push('Due: ' + dt.toLocaleString());
+        } catch {}
+      }
+      parts.push(capitalize(task.priority));
+      meta.textContent = parts.join(' • ');
+
+      left.appendChild(title);
+      left.appendChild(meta);
+
+      const right = document.createElement('div');
+      right.style.display = 'flex';
+      right.style.gap = '6px';
+      right.style.alignItems = 'center';
+
+      const doneBtn = document.createElement('button');
+      doneBtn.textContent = task.done ? 'Undo' : 'Done';
+      doneBtn.addEventListener('click', () => {
+        task.done = !task.done;
+        saveAndRender();
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', () => {
+        if (!confirm('Delete this task?')) return;
+        tasks = tasks.filter(t => t.id !== task.id);
+        saveAndRender();
+      });
+
+      const pr = document.createElement('span');
+      pr.textContent = task.priority === 'high' ? '●' : task.priority === 'medium' ? '◐' : '○';
+      pr.title = 'Priority';
+      pr.style.marginRight = '8px';
+      pr.className = task.priority === 'high' ? 'priority-high' : task.priority === 'medium' ? 'priority-med' : 'priority-low';
+
+      right.appendChild(pr);
+      right.appendChild(doneBtn);
+      right.appendChild(delBtn);
+
+      el.appendChild(left);
+      el.appendChild(right);
+      tasksDiv.appendChild(el);
+    });
+  }
+
+  function updateProgress() {
+    const total = tasks.length || 0;
+    const done = tasks.filter(t => t.done).length;
+    const percent = total ? Math.round((done/total)*100) : 0;
+    progressEl.style.width = percent + '%';
+    pct.textContent = percent + '%';
+  }
+
+  function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // Reminder checker: every 30 seconds, look for tasks due within next 10 minutes that are not done and not yet reminded.
+  function checkReminders() {
+    const now = Date.now();
+    const soonWindow = 10 * 60 * 1000; // 10 minutes
+    tasks.forEach(task => {
+      if (task.done || task.reminded || !task.due) return;
+      const dueMs = new Date(task.due).getTime();
+      if (isNaN(dueMs)) return;
+      // if due within next 10 minutes or already past due
+      if (dueMs - now <= soonWindow) {
+        notifyUser(`Upcoming: ${task.title}`, (task.subject ? task.subject + ' — ' : '') + (task.due ? new Date(task.due).toLocaleString() : 'No deadline'));
+        task.reminded = true;
+        saveAndRender();
+      }
+    });
+  }
+
+  function notifyUser(title, body) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(title, { body });
+      } catch(e) {
+        alert(title + '\\n' + body);
+      }
+    } else {
+      // fallback browser alert
+      // avoid spamming: show only a short alert
+      alert(title + '\\n' + body);
+    }
+  }
+
+  // periodic reminder check
+  setInterval(checkReminders, 30 * 1000);
+  // also run once on load
+  checkReminders();
+  renderTasks();
+  updateProgress();
+
+})();
+</script>
+</body>
+</html>

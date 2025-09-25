@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Study Planner</title>
+  <style>
+    body {
+  font-family: Arial, sans-serif;
+  background: #f2f4f8;
+  margin: 0;
+  padding: 0;
+}
+.container {
+  max-width: 500px;
+  margin: 40px auto;
+  background: #fff;
+  border-radius: 10px;
+  padding: 2em 2em 2em 2em;
+  box-shadow: 0 3px 12px #aaa;
+}
+h1, h2 {
+  margin-top: 0;
+  color: #234567;
+}
+form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+input[type="text"], input[type="date"] {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+button {
+  background: #007bff;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+button:hover {
+  background: #0056c7;
+}
+ul#taskList {
+  list-style: none;
+  padding: 0;
+}
+.task-item {
+  background: #f9f9f9;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  box-shadow: 0 1px 4px #cca;
+}
+.task-done {
+  text-decoration: line-through;
+  color: #888;
+}
+.task-actions button {
+  background: #eee;
+  color: #333;
+  margin-left: 5px;
+  border: 0;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+}
+.task-actions button:hover {
+  background: #d22;
+  color: #fff;
+}
+#timeline {
+  margin-top: 15px;
+  padding: 15px;
+  background: #eaf1fb;
+  border-radius: 6px;
+  min-height: 60px;
+}
+.timeline-task {
+  display: inline-block;
+  background: #007bff;
+  color: #fff;
+  border-radius: 12px;
+  padding: 6px 12px;
+  margin: 4px 4px;
+  font-size: 0.95em;
+  transition: background 0.2s;
+}
+.timeline-task.done {
+  background: #5cb85c;
+  text-decoration: line-through;
+}
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Study Planner</h1>
+    <form id="taskForm">
+      <input type="text" id="taskTitle" placeholder="Task Title" required>
+      <input type="date" id="taskDate" required>
+      <button type="submit">Add Task</button>
+    </form>
+    <ul id="taskList"></ul>
+    <h2>Timeline</h2>
+    <div id="timeline"></div>
+  </div>
+  <script>
+    let tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+
+function saveTasks() {
+  localStorage.setItem('tasks', JSON.stringify(tasks));
+}
+
+function renderTasks() {
+  const taskList = document.getElementById('taskList');
+  taskList.innerHTML = '';
+  if (tasks.length === 0) {
+    taskList.innerHTML = `<li>No tasks. Add some!</li>`;
+  } else {
+    tasks.forEach((task, idx) => {
+      const li = document.createElement('li');
+      li.className = 'task-item' + (task.completed ? ' task-done' : '');
+      li.innerHTML = `
+        <span${task.completed ? ' class="task-done"' : ''}>
+          ${task.title} - ${task.date}
+        </span>
+        <span class="task-actions">
+          <button title="Mark as done" onclick="toggleDone(${idx})">&#10003;</button>
+          <button title="Delete" onclick="deleteTask(${idx})">&times;</button>
+        </span>
+      `;
+      taskList.appendChild(li);
+    });
+  }
+  renderTimeline();
+}
+
+function renderTimeline() {
+  const timeline = document.getElementById('timeline');
+  if (!tasks.length) {
+    timeline.innerHTML = 'Timeline empty.';
+    return;
+  }
+  timeline.innerHTML = '';
+  tasks.sort((a,b) => a.date.localeCompare(b.date));
+  tasks.forEach(task => {
+    const span = document.createElement('span');
+    span.className = 'timeline-task' + (task.completed ? ' done' : '');
+    span.textContent = `${task.title} (${task.date})`;
+    timeline.appendChild(span);
+  });
+}
+
+function addTask(title, date) {
+  tasks.push({ title, date, completed: false });
+  saveTasks();
+  renderTasks();
+}
+
+function deleteTask(idx) {
+  tasks.splice(idx, 1);
+  saveTasks();
+  renderTasks();
+}
+
+function toggleDone(idx) {
+  tasks[idx].completed = !tasks[idx].completed;
+  saveTasks();
+  renderTasks();
+}
+
+document.getElementById('taskForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const title = document.getElementById('taskTitle').value.trim();
+  const date = document.getElementById('taskDate').value;
+  if (!title || !date) return;
+  addTask(title, date);
+  document.getElementById('taskForm').reset();
+});
+
+window.onload = renderTasks;
+
+  </script>
+</body>
+</html>
